@@ -11,7 +11,7 @@ export type ControllerConfig = {
   governor: Address;
   approver: Address;
   halter: Address;
-  
+
 };
 
 export function controllerConfigToCell(config: ControllerConfig): Cell {
@@ -127,7 +127,7 @@ export class Controller implements Contract {
         });
     }
 
-    async sendApprove(provider: ContractProvider, via: Sender, approve: boolean = true, amount: bigint = toNano('0.1')) {
+    async sendApprove(provider: ContractProvider, via: Sender, approve: boolean = true, amount: bigint = toNano('0.5')) {
         // dissaprove support
         const op = approve ? Op.controller.approve : Op.controller.disapprove;
 
@@ -340,7 +340,7 @@ export class Controller implements Contract {
         ]);
         return stack.readBigNumber();
     }
-  
+
     async getRequestWindow(provider: ContractProvider) {
         const { stack } = await provider.get("request_window_time", [])
         return {

@@ -7,7 +7,7 @@
 #include "params.func";
 #include "messages.func";
 
-const int min_tons_for_storage = 10000000; ;;ONE_TON / 100;
+const int min_tons_for_storage = 20000000; ;; 0.02 TON
 ;; Note that 2 * gas_consumptions is expected to be able to cover fees on both wallets (sender and receiver)
 ;; and also constant fees on inter-wallet interaction, in particular fwd fee on state_init transfer
 ;; that means that you need to reconsider this fee when:
@@ -71,7 +71,7 @@ const int burn_notification = 750000000;
   internal_transfer  query_id:uint64 amount:(VarUInteger 16) from:MsgAddress
                      response_address:MsgAddress
                      forward_ton_amount:(VarUInteger 16)
-                     forward_payload:(Either Cell ^Cell) 
+                     forward_payload:(Either Cell ^Cell)
                      = InternalMsgBody;
 -}
 
@@ -131,7 +131,7 @@ const int burn_notification = 750000000;
   internal_transfer  query_id:uint64 amount:(VarUInteger 16) from:MsgAddress
                      response_address:MsgAddress
                      forward_ton_amount:(VarUInteger 16)
-                     forward_payload:(Either Cell ^Cell) 
+                     forward_payload:(Either Cell ^Cell)
                      = InternalMsgBody;
 -}
 

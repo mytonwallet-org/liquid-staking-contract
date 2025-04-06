@@ -66,7 +66,7 @@ const int JETTONS_WORKCHAIN = 0;
 const int MAX_LOAN_DICT_DEPTH = 12;
 
 const int ONE_TON = 1000000000;
-const int MIN_TONS_FOR_STORAGE = 10 * ONE_TON; ;; 10 TON
+const int MIN_TONS_FOR_STORAGE = 20 * ONE_TON; ;; 20 TON
 const int CONTROLLER_WORKCHAIN = MASTERCHAIN;
 
 const int SERVICE_NOTIFICATION_AMOUNT = 2 * ONE_TON / 100;
@@ -238,7 +238,7 @@ int muldiv_extra(int a, int b, int c) inline {
             supply -= jetton_amount;
             request_to_mint_pool_jettons(from_address, jetton_amount, query_id, true);
         }
-        
+
     {- ========== Governance operations ========== -}
     } elseif (op == sudo::send_message) {
                 process_sudo_request(sender_address, in_msg_body);
@@ -499,7 +499,7 @@ int muldiv_extra(int a, int b, int c) inline {
       send_msg_builder(interest_manager, fee,
                begin_cell().store_body_header(interest_manager::operation_fee, cur_lt()),
                msgflag::NON_BOUNCEABLE, sendmode::REGULAR);
-      
+
     }
     sent_during_rotation += SERVICE_NOTIFICATION_AMOUNT;
     send_msg_builder(interest_manager, SERVICE_NOTIFICATION_AMOUNT,

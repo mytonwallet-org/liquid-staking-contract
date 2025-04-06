@@ -54,9 +54,9 @@ cell calculate_payout_state_init(slice pool_address, int round_id, int distribut
   slice name = concat(distributing_jettons? ? "Deposit " : "Withdrawal ", concat("Payout#", encode_number_to_text(round_id, 10)));
   content_dict~udict_set_ref(256, "name"H, pack_metadata_value(name));
   if (distributing_jettons?) {
-    content_dict~udict_set_ref(256, "description"H, pack_metadata_value("Converts deposited TON to Pool Jettons"));
+    content_dict~udict_set_ref(256, "description"H, pack_metadata_value("Converts deposited ION to Pool Jettons"));
   } else {
-    content_dict~udict_set_ref(256, "description"H, pack_metadata_value("Converts burned Pool Jettons to TON"));
+    content_dict~udict_set_ref(256, "description"H, pack_metadata_value("Converts burned Pool Jettons to ION"));
   }
   content_dict~udict_set_ref(256, "symbol"H, pack_metadata_value("⏲️"));
   content_dict~udict_set_ref(256, "uri"H, pack_metadata_value("my-custom-stake-address.ton"));
@@ -67,8 +67,8 @@ cell calculate_payout_state_init(slice pool_address, int round_id, int distribut
   randomize_lt();
   content_dict~udict_set_ref(256, "random_seed"H, begin_cell().store_uint(random() >> 8, 256).store_uint(get_data().cell_hash(), 256).end_cell());
   cell onchain_content = begin_cell().store_uint(0, 8).store_dict(content_dict).end_cell();
-  
-  
+
+
   cell data =  begin_cell()
             .store_coins(0)                   ;; total_supply
             .store_slice(my_address())        ;; admin_address

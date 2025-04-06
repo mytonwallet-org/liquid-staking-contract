@@ -25,7 +25,7 @@
 const int ONE_TON = 1000000000;
 const int ELECTOR_OPERATION_VALUE = 103 * ONE_TON / 100 ;
 const int MIN_REQUEST_LOAN_VALUE = ONE_TON ; ;; should cover controller and pool gas
-const int MIN_TONS_FOR_STORAGE = 2 * ONE_TON; ;; 2 TON
+const int MIN_TONS_FOR_STORAGE = 4 * ONE_TON; ;; 4 TON
 const int DEPOSIT_FEE = ONE_TON / 4; ;; 0.25 TON
 const int WITHDRAWAL_FEE = ONE_TON / 4; ;; 0.25 TON
 const int MIN_STAKE_TO_SEND = 50000 * ONE_TON; ;; 50 000 TON
@@ -542,14 +542,14 @@ _ get_validator_controller_data() method_id {
     load_data();
     return (
       state, halted?, approved?,
-      
+
       stake_amount_sent, stake_at,
-      
+
       saved_validator_set_hash,
       validator_set_changes_count,
       validator_set_change_time,
       stake_held_for,
-      
+
       borrowed_amount, borrowing_time,
       validator, pool, sudoer
       );
