@@ -23,11 +23,11 @@
 
 
 const int ONE_TON = 1000000000;
-const int ELECTOR_OPERATION_VALUE = 103 * ONE_TON / 100 ;
-const int MIN_REQUEST_LOAN_VALUE = ONE_TON ; ;; should cover controller and pool gas
-const int MIN_TONS_FOR_STORAGE = 4 * ONE_TON; ;; 4 TON
-const int DEPOSIT_FEE = ONE_TON / 4; ;; 0.25 TON Maybe it needs to be increased?
-const int WITHDRAWAL_FEE = ONE_TON / 4; ;; 0.25 TON Maybe it needs to be increased?
+const int ELECTOR_OPERATION_VALUE = 2 * 103 * ONE_TON / 100 ;
+const int MIN_REQUEST_LOAN_VALUE = 4 * ONE_TON; ;; should cover controller and pool gas
+const int MIN_TONS_FOR_STORAGE = 4 * ONE_TON;
+const int DEPOSIT_FEE = ONE_TON;
+const int WITHDRAWAL_FEE = ONE_TON;
 const int MIN_STAKE_TO_SEND = 50000 * ONE_TON; ;; 50 000 TON
 
 ;; Time in seconds for validator to make mandatory actions, such as
