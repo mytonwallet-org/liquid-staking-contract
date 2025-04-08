@@ -11,7 +11,7 @@ export type ControllerConfig = {
   governor: Address;
   approver: Address;
   halter: Address;
-  
+
 };
 
 export function controllerConfigToCell(config: ControllerConfig): Cell {
@@ -340,7 +340,7 @@ export class Controller implements Contract {
         ]);
         return stack.readBigNumber();
     }
-  
+
     async getRequestWindow(provider: ContractProvider) {
         const { stack } = await provider.get("request_window_time", [])
         return {
