@@ -85,13 +85,14 @@ export class JettonMinter implements Contract {
                .endCell();
     }
 
-    async sendChangeAdmin(provider: ContractProvider, via: Sender, newOwner: Address) {
+    async sendChangeAdmin(provider: ContractProvider, via: Sender, newOwner: Address, amount = toNano("0.1")) {
         await provider.internal(via, {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: JettonMinter.changeAdminMessage(newOwner),
-            value: toNano("0.1"),
+            value: amount,
         });
     }
+
     static changeContentMessage(content: Cell) {
         return beginCell().storeUint(Op.minter.change_content, 32).storeUint(0, 64) // op, queryId
                           .storeRef(content)
@@ -159,7 +160,7 @@ export class JettonMinter implements Contract {
     }
 
     async sendCodeUpgrade(provider: ContractProvider, via: Sender,
-                          minter_code: Cell | null, 
+                          minter_code: Cell | null,
                           voting_code: Cell | null,
                           value:bigint = toNano('0.1')) {
         await provider.internal(via, {
