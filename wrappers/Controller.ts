@@ -127,7 +127,7 @@ export class Controller implements Contract {
         });
     }
 
-    async sendApprove(provider: ContractProvider, via: Sender, approve: boolean = true, amount: bigint = toNano('0.5')) {
+    async sendApprove(provider: ContractProvider, via: Sender, approve: boolean = true, amount: bigint = toNano('0.1')) {
         // dissaprove support
         const op = approve ? Op.controller.approve : Op.controller.disapprove;
 
