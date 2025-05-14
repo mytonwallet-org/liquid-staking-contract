@@ -16,9 +16,9 @@
 slice addr_none() asm " <b 0 2 u, b> <s PUSHSLICE";
 const int ONE_COIN = 1000000000;
 
-const int jetton_transfer_notification_value = ONE_COIN / 100;
-const int burn_request_value = ONE_COIN / 100;
-const int start_distribution_gas_usage = ONE_COIN / 100;
+const int jetton_transfer_notification_value = (ONE_COIN / 100) * 4; ;; 0.04 TON
+const int burn_request_value = (ONE_COIN / 100) * 4; ;; 0.04 TON
+const int start_distribution_gas_usage = (ONE_COIN / 100) * 4; ;; 0.04 TON
 
 
 ;; storage scheme

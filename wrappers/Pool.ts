@@ -7,13 +7,13 @@ export type PoolConfig = {
   pool_jetton: Address;
   pool_jetton_supply: bigint;
   optimistic_deposit_withdrawals: bigint;
-  
+
   sudoer: Address;
   governor: Address;
   interest_manager: Address;
   halter: Address;
   approver: Address;
-  
+
   controller_code: Cell;
   payout_wallet_code?: Cell;
   pool_jetton_wallet_code: Cell;
@@ -318,9 +318,9 @@ export class Pool implements Contract {
         });
     }
 
-    async sendTouch(provider: ContractProvider, via: Sender) {
+    async sendTouch(provider: ContractProvider, via: Sender, value = toNano(0.1)) {
         await provider.internal(via, {
-            value: toNano('0.1'),
+            value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
                      .storeUint(Op.pool.touch, 32) // op = touch
@@ -350,6 +350,20 @@ export class Pool implements Contract {
                   .endCell(),
         });
     }
+
+    async sendSetMinMaxLoan(provider: ContractProvider, via: Sender, min_loan: bigint, max_loan: bigint) {
+      await provider.internal(via, {
+        value: toNano('0.3'),
+        sendMode: SendMode.PAY_GAS_SEPARATELY,
+        body: beginCell()
+          .storeUint(Op.interestManager.set_min_max_loan, 32)
+          .storeUint(1, 64) // query id
+          .storeCoins(min_loan)
+          .storeCoins(max_loan)
+          .endCell(),
+      });
+    }
+
     async sendSetGovernanceFee(provider: ContractProvider, via: Sender, fee: number | bigint, query_id: number | bigint = 1) {
       await provider.internal(via, {
         value: toNano('0.3'),
@@ -438,8 +452,13 @@ export class Pool implements Contract {
         });
     }
 
-    async sendUpgrade(provider: ContractProvider, via: Sender,
-                      data: Cell | null, code: Cell | null, afterUpgrade: Cell | null) {
+    async sendUpgrade(provider: ContractProvider, via: Sender, options: {
+      data?: Cell,
+      code?: Cell,
+      afterUpgrade?: Cell
+    }) {
+      const { code, data, afterUpgrade } = options;
+
         //upgrade#96e7f528 query_id:uint64
         //data:(Maybe ^Cell) code:(Maybe ^Cell) after_upgrade:(Maybe ^Cell) = InternalMsgBody;
 

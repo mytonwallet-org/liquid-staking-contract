@@ -136,6 +136,18 @@ export class PayoutCollection implements Contract {
         });
     }
 
+    async sendInit(provider: ContractProvider, via: Sender, distribution: Distribution, queryId: bigint = 0n) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+              .storeUint(Op.init_collection, 32)
+              .storeUint(queryId, 64) // op, queryId
+              .storeRef(packDistribution(distribution))
+              .endCell(),
+            value: toNano(1),
+        });
+    }
+
     async send(provider: ContractProvider, via: Sender, value: bigint, body: Cell) {
         await provider.internal(via, {
             value,
