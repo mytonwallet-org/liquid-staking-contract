@@ -452,21 +452,34 @@ export class Pool implements Contract {
         });
     }
 
-    async sendUpgrade(provider: ContractProvider, via: Sender,
-                      data: Cell | null, code: Cell | null, afterUpgrade: Cell | null) {
+    static upgradeMessage(
+        data: Cell | null,
+        code: Cell | null,
+        afterUpgrade: Cell | null,
+        query_id: bigint | number = 1,
+    ): Cell {
         //upgrade#96e7f528 query_id:uint64
         //data:(Maybe ^Cell) code:(Maybe ^Cell) after_upgrade:(Maybe ^Cell) = InternalMsgBody;
+        return beginCell()
+                 .storeUint(Op.sudo.upgrade, 32)
+                 .storeUint(query_id, 64)
+                 .storeMaybeRef(data)
+                 .storeMaybeRef(code)
+                 .storeMaybeRef(afterUpgrade)
+               .endCell();
+    }
 
+    async sendUpgrade(
+        provider: ContractProvider,
+        via: Sender,
+        data: Cell | null,
+        code: Cell | null,
+        afterUpgrade: Cell | null
+    ) {
         await provider.internal(via, {
             value: toNano('0.5'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: beginCell()
-                     .storeUint(Op.sudo.upgrade, 32) // op = touch
-                     .storeUint(1, 64) // query id
-                     .storeMaybeRef(data)
-                     .storeMaybeRef(code)
-                     .storeMaybeRef(afterUpgrade)
-                  .endCell(),
+            body: Pool.upgradeMessage(data, code, afterUpgrade),
         });
     }
 
