@@ -3,6 +3,7 @@
     "version": "0.0.1",
     "license": "MIT",
     "scripts": {
+        "build": "blueprint build --all",
         "test": "jest"
     },
     "devDependencies": {

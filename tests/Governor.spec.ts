@@ -166,7 +166,7 @@ describe('Governor actions tests', () => {
             const prevState = bc.snapshot();
             let   res     = await pool.sendSudoMsg(via, 0, testMsg);
             assertExitCode(res.transactions, exp_code);
-            res = await pool.sendUpgrade(via, mockCell, mockCell, mockCell);
+            res = await pool.sendUpgrade(via, { data: mockCell, code: mockCell, afterUpgrade: mockCell });
             assertExitCode(res.transactions, exp_code);
             await bc.loadFrom(prevState);
         }
@@ -392,6 +392,38 @@ describe('Governor actions tests', () => {
                 expect(poolAfter.interestRate).toEqual(newInterest);
             });
         });
+        describe('Min/max loan setting', () => {
+            it('Only interest manager should be able to set min/max loan', async () => {
+                const poolBefore = await pool.getFullData();
+                const newMin     = poolBefore.minLoan + toNano(getRandomInt(1, 10));
+                const newMax     = poolBefore.maxLoan + toNano(getRandomInt(11, 20));
+                const randomUser = bc.sender(differentAddress(newInterestManager));
+                const governor   = bc.sender(newGovernor);
+
+                let res = await pool.sendSetMinMaxLoan(randomUser, newMin, newMax);
+                assertExitCode(res.transactions, Errors.wrong_sender);
+                // Make sure governor is a separate role
+                res = await pool.sendSetMinMaxLoan(governor, newMin, newMax);
+                assertExitCode(res.transactions, Errors.wrong_sender);
+
+                // State should not change after rejected attempts
+                const poolAfter = await pool.getFullData();
+                expect(poolAfter.minLoan).toEqual(poolBefore.minLoan);
+                expect(poolAfter.maxLoan).toEqual(poolBefore.maxLoan);
+            });
+            it('Interest manager should be able to set min/max loan', async () => {
+                const poolBefore = await pool.getFullData();
+                const newMin     = poolBefore.minLoan + toNano(getRandomInt(1, 100));
+                const newMax     = poolBefore.maxLoan + toNano(getRandomInt(101, 200));
+
+                const res = await pool.sendSetMinMaxLoan(bc.sender(newInterestManager), newMin, newMax);
+                assertExitCode(res.transactions, 0);
+
+                const poolAfter = await pool.getFullData();
+                expect(poolAfter.minLoan).toEqual(newMin);
+                expect(poolAfter.maxLoan).toEqual(newMax);
+            });
+        });
         describe('Halting', () => {
             it('Only halter should be able to halt pool', async() => {
                 const notHalter = differentAddress(newHalter);
@@ -487,7 +519,7 @@ describe('Governor actions tests', () => {
                         value: toNano('1'),
                         body: beginCell().endCell()
                     })),
-                    async () => pool.sendUpgrade(governor, null, null, null),
+                    async () => pool.sendUpgrade(governor, {}),
                     async () => pool.sendSetSudoer(governor, randomAddress()),
                     // We don't want halt state to change here
                     async () => pool.sendUnhalt(bc.sender(randomAddress())),
@@ -495,7 +527,8 @@ describe('Governor actions tests', () => {
                     async () => pool.sendSetRoles(governor, null, null, null, null),
                     async () => pool.sendSetDepositSettings(governor, toNano('1'), true, true),
                     async () => pool.sendSetGovernanceFee(governor, 0),
-                    async () => pool.sendSetInterest(bc.sender(newInterestManager), 0)
+                    async () => pool.sendSetInterest(bc.sender(newInterestManager), 0),
+                    async () => pool.sendSetMinMaxLoan(bc.sender(newInterestManager), toNano('100'), toNano('1000'))
                 ];
 
                 for (let cb of notHaltable) {
@@ -594,7 +627,7 @@ describe('Governor actions tests', () => {
         const codeBefore = await getContractData(pool.address);
         const mockCell = beginCell().storeUint(Date.now(), 64).endCell();
 
-        const res = await pool.sendUpgrade(deployer.getSender(), mockCell, mockCell, execCell);
+        const res = await pool.sendUpgrade(deployer.getSender(), { data: mockCell, code: mockCell, afterUpgrade: execCell });
         expect(await getContractData(pool.address)).toEqualCell(mockCell);
         expect(await getContractCode(pool.address)).toEqualCell(mockCell);
 
@@ -611,17 +644,17 @@ describe('Governor actions tests', () => {
         const dataBefore = await getContractData(pool.address);
         const mockCell = beginCell().storeUint(Date.now(), 64).endCell();
 
-        let res = await pool.sendUpgrade(deployer.getSender(), mockCell, null, null); // Only data
+        let res = await pool.sendUpgrade(deployer.getSender(), { data: mockCell }); // Only data
         expect(await getContractData(pool.address)).toEqualCell(mockCell);
         expect(await getContractCode(pool.address)).toEqualCell(codeBefore);
         await bc.loadFrom(prevState);
 
-        res = await pool.sendUpgrade(deployer.getSender(), null, mockCell, null); // Only code
+        res = await pool.sendUpgrade(deployer.getSender(), { code: mockCell }); // Only code
         expect(await getContractData(pool.address)).toEqualCell(dataBefore);
         expect(await getContractCode(pool.address)).toEqualCell(mockCell);
         await bc.loadFrom(prevState);
 
-        res = await pool.sendUpgrade(deployer.getSender(), null, null, execCell); // Only execution should be possible
+        res = await pool.sendUpgrade(deployer.getSender(), { afterUpgrade: execCell }); // Only execution should be possible
         expect(await getContractData(pool.address)).toEqualCell(dataBefore);
         expect(await getContractCode(pool.address)).toEqualCell(codeBefore);
         expect(res.transactions).toHaveTransaction({
