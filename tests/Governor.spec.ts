@@ -392,6 +392,38 @@ describe('Governor actions tests', () => {
                 expect(poolAfter.interestRate).toEqual(newInterest);
             });
         });
+        describe('Min/max loan setting', () => {
+            it('Only interest manager should be able to set min/max loan', async () => {
+                const poolBefore = await pool.getFullData();
+                const newMin     = poolBefore.minLoan + toNano(getRandomInt(1, 10));
+                const newMax     = poolBefore.maxLoan + toNano(getRandomInt(11, 20));
+                const randomUser = bc.sender(differentAddress(newInterestManager));
+                const governor   = bc.sender(newGovernor);
+
+                let res = await pool.sendSetMinMaxLoan(randomUser, newMin, newMax);
+                assertExitCode(res.transactions, Errors.wrong_sender);
+                // Make sure governor is a separate role
+                res = await pool.sendSetMinMaxLoan(governor, newMin, newMax);
+                assertExitCode(res.transactions, Errors.wrong_sender);
+
+                // State should not change after rejected attempts
+                const poolAfter = await pool.getFullData();
+                expect(poolAfter.minLoan).toEqual(poolBefore.minLoan);
+                expect(poolAfter.maxLoan).toEqual(poolBefore.maxLoan);
+            });
+            it('Interest manager should be able to set min/max loan', async () => {
+                const poolBefore = await pool.getFullData();
+                const newMin     = poolBefore.minLoan + toNano(getRandomInt(1, 100));
+                const newMax     = poolBefore.maxLoan + toNano(getRandomInt(101, 200));
+
+                const res = await pool.sendSetMinMaxLoan(bc.sender(newInterestManager), newMin, newMax);
+                assertExitCode(res.transactions, 0);
+
+                const poolAfter = await pool.getFullData();
+                expect(poolAfter.minLoan).toEqual(newMin);
+                expect(poolAfter.maxLoan).toEqual(newMax);
+            });
+        });
         describe('Halting', () => {
             it('Only halter should be able to halt pool', async() => {
                 const notHalter = differentAddress(newHalter);
@@ -495,7 +527,8 @@ describe('Governor actions tests', () => {
                     async () => pool.sendSetRoles(governor, null, null, null, null),
                     async () => pool.sendSetDepositSettings(governor, toNano('1'), true, true),
                     async () => pool.sendSetGovernanceFee(governor, 0),
-                    async () => pool.sendSetInterest(bc.sender(newInterestManager), 0)
+                    async () => pool.sendSetInterest(bc.sender(newInterestManager), 0),
+                    async () => pool.sendSetMinMaxLoan(bc.sender(newInterestManager), toNano('100'), toNano('1000'))
                 ];
 
                 for (let cb of notHaltable) {

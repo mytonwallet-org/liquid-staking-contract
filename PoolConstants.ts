@@ -74,6 +74,7 @@ export abstract class Op {
     }
     static readonly interestManager = {
         set_interest : 0xc9f04485,
+        set_min_max_loan: 0x3a7f1c2b,
         operation_fee : 0x54d37487,
         request_notification : 0xb1ebae06,
         stats : 0xc1344900,

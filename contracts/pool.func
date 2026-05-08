@@ -277,6 +277,12 @@ int muldiv_extra(int a, int b, int c) inline {
                 assert_state!(state::NORMAL);
                 assert_sender!(sender_address, interest_manager);
                 interest_rate = in_msg_body~load_share();
+    } elseif (op == interest_manager::set_min_max_loan) {
+        assert_state!(state::NORMAL);
+        assert_sender!(sender_address, interest_manager);
+        int min_loan = in_msg_body~load_coins();
+        int max_loan = in_msg_body~load_coins();
+        loan_params_per_validator = [min_loan, max_loan];
     } else {
         update_round(pair_first(get_balance()) - msg_value);
         assert_not_halted!();
