@@ -26,7 +26,7 @@ export async function run(_provider: NetworkProvider) {
   const codeHashHex = poolCode.hash().toString('hex');
   const codeHashBase64 = poolCode.hash().toString('base64');
 
-  const body = Pool.upgradeMessage(null, poolCode, null);
+  const body = Pool.upgradeMessage({ code: poolCode });
   const bodyBoc = body.toBoc().toString('base64');
   const bodyHashHex = body.hash().toString('hex');
 

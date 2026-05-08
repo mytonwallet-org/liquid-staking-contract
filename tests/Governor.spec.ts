@@ -166,7 +166,7 @@ describe('Governor actions tests', () => {
             const prevState = bc.snapshot();
             let   res     = await pool.sendSudoMsg(via, 0, testMsg);
             assertExitCode(res.transactions, exp_code);
-            res = await pool.sendUpgrade(via, mockCell, mockCell, mockCell);
+            res = await pool.sendUpgrade(via, { data: mockCell, code: mockCell, afterUpgrade: mockCell });
             assertExitCode(res.transactions, exp_code);
             await bc.loadFrom(prevState);
         }
@@ -519,7 +519,7 @@ describe('Governor actions tests', () => {
                         value: toNano('1'),
                         body: beginCell().endCell()
                     })),
-                    async () => pool.sendUpgrade(governor, null, null, null),
+                    async () => pool.sendUpgrade(governor, {}),
                     async () => pool.sendSetSudoer(governor, randomAddress()),
                     // We don't want halt state to change here
                     async () => pool.sendUnhalt(bc.sender(randomAddress())),
@@ -627,7 +627,7 @@ describe('Governor actions tests', () => {
         const codeBefore = await getContractData(pool.address);
         const mockCell = beginCell().storeUint(Date.now(), 64).endCell();
 
-        const res = await pool.sendUpgrade(deployer.getSender(), mockCell, mockCell, execCell);
+        const res = await pool.sendUpgrade(deployer.getSender(), { data: mockCell, code: mockCell, afterUpgrade: execCell });
         expect(await getContractData(pool.address)).toEqualCell(mockCell);
         expect(await getContractCode(pool.address)).toEqualCell(mockCell);
 
@@ -644,17 +644,17 @@ describe('Governor actions tests', () => {
         const dataBefore = await getContractData(pool.address);
         const mockCell = beginCell().storeUint(Date.now(), 64).endCell();
 
-        let res = await pool.sendUpgrade(deployer.getSender(), mockCell, null, null); // Only data
+        let res = await pool.sendUpgrade(deployer.getSender(), { data: mockCell }); // Only data
         expect(await getContractData(pool.address)).toEqualCell(mockCell);
         expect(await getContractCode(pool.address)).toEqualCell(codeBefore);
         await bc.loadFrom(prevState);
 
-        res = await pool.sendUpgrade(deployer.getSender(), null, mockCell, null); // Only code
+        res = await pool.sendUpgrade(deployer.getSender(), { code: mockCell }); // Only code
         expect(await getContractData(pool.address)).toEqualCell(dataBefore);
         expect(await getContractCode(pool.address)).toEqualCell(mockCell);
         await bc.loadFrom(prevState);
 
-        res = await pool.sendUpgrade(deployer.getSender(), null, null, execCell); // Only execution should be possible
+        res = await pool.sendUpgrade(deployer.getSender(), { afterUpgrade: execCell }); // Only execution should be possible
         expect(await getContractData(pool.address)).toEqualCell(dataBefore);
         expect(await getContractCode(pool.address)).toEqualCell(codeBefore);
         expect(res.transactions).toHaveTransaction({

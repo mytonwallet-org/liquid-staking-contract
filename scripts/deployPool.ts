@@ -182,7 +182,7 @@ export async function run(provider: NetworkProvider) {
     newPoolConfig.controller_code = controller_code;
     newPoolConfig.payout_minter_code = payout_collection;
     let storage = poolFullConfigToCell(newPoolConfig);
-    await pool.sendUpgrade(provider.sender(), storage, pool_code, null);
+    await pool.sendUpgrade(provider.sender(), { data: storage, code: pool_code });
     */
 
 
