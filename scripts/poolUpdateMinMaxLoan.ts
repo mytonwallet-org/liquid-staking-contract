@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { NetworkProvider } from '@ton-community/blueprint';
-import { Address, toNano } from 'ton-core';
+import { Address, fromNano, toNano } from 'ton-core';
 import { Pool } from '../wrappers/Pool';
 import { AFTER_UPGRADE_METHOD_ID, compileAfterUpgrade, parseOrder, verifyOrder } from '../wrappers/UpdatePool';
 
@@ -16,8 +16,8 @@ export async function run(_provider: NetworkProvider) {
   const bodyBoc = body.toBoc().toString('base64');
   const bodyHashHex = body.hash().toString('hex');
 
-  console.log('Pool:                    ', POOL);
-  console.log('Value (nanoTON):         ', EXPECTED_VALUE.toString());
+  console.log('Destination:             ', POOL);
+  console.log('Value (TON):             ', fromNano(EXPECTED_VALUE));
   console.log(`after_upgrade(${AFTER_UPGRADE_METHOD_ID}) hash:  `, afterUpgrade.hash().toString('hex'));
   console.log('Upgrade body hash (hex): ', bodyHashHex);
   console.log('Upgrade body BOC (base64):');
@@ -41,7 +41,7 @@ export async function run(_provider: NetworkProvider) {
   console.log('  expires at:          ', new Date(expireUnix * 1000).toISOString());
   console.log('  send_mode:           ', msg.sendMode);
   console.log('  destination:         ', msg.destination.toString());
-  console.log('  value (nanoTON):     ', msg.value.toString());
+  console.log('  value (TON):         ', fromNano(msg.value));
   console.log('  body hash (hex):     ', msg.body.hash().toString('hex'));
   console.log('  status:              OK (matches expected upgrade body, pool, value)');
 }

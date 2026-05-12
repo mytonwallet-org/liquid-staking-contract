@@ -22,9 +22,7 @@ const POOL_ADDRESS = 'EQD2_4d91M4TVbEBVyBF8J1UwpMJc361LKVCz6bBlffMW05o';
 const ORDER_BOC_PATH = path.resolve(process.env.ORDER_BOC ?? 'order.boc');
 const TON_API_KEY = process.env.TON_API_KEY;
 
-const describeOrSkip = TON_API_KEY ? describe : describe.skip;
-
-describeOrSkip('Multisig v1 upgrade flow (uses production state via toncenter)', () => {
+describe('Multisig v1 upgrade flow (uses production state via toncenter)', () => {
   let bc: Blockchain;
   let pool: SandboxContract<Pool>;
   let multisigAddress: Address;
@@ -88,29 +86,17 @@ describeOrSkip('Multisig v1 upgrade flow (uses production state via toncenter)',
       pendingQueries: Dictionary.empty(Dictionary.Keys.Uint(64), Dictionary.Values.Cell()),
     });
 
-    // Top up multisig so it can forward 0.5 TON to the pool — production
-    // balance is ~0.445 TON, which the sendMode=3 (IGNORE_ERRORS) action would
-    // silently skip on insufficient funds.
     const code = await getContractCode(bc, multisigAddress);
     await bc.setShardAccount(multisigAddress, createShardAccount({
       address: multisigAddress, balance: toNano('5'), code, data: newData,
     }));
 
-    // queryId top 32 bits encode the expire timestamp; align bc.now so the
-    // multisig accepts the query as live (throw_if 33 guards expiration).
-    // Build the order locally against the currently compiled UpdatePool — the
-    // on-disk order.boc is signed against a specific UpdatePool build and
-    // drifts as soon as we rebuild the contract.
-    const queryId = BigInt(Math.floor(Date.now() / 1000) + 86400) << 32n;
+    const orderCell = Cell.fromBoc(fs.readFileSync(ORDER_BOC_PATH))[0];
+    const queryId = orderCell.beginParse().loadUintBig(64);
     const expireUnix = Number(queryId >> 32n);
     bc.now = expireUnix - 3600;
-    const orderCell = await buildLocalOrder(queryId, Address.parse(POOL_ADDRESS));
 
-    // Build the externally signed payload exactly like multisig-dapp does:
-    //   inner  = [8: owner_id=0] [1: 0 = no extra sigs dict] [32: wallet_id] [order...]
-    //   signed = [512: signature] [inner...]
-    // Signature is a 64-byte zero buffer — ignoreChksig=true makes the
-    // contract accept it.
+    // Build the externally signed payload exactly like multisig-dapp does
     const inner = beginCell()
       .storeUint(0, 8)
       .storeBit(false)
@@ -245,24 +231,3 @@ async function getContractCode(bc: Blockchain, addr: Address): Promise<Cell> {
   return smc.account.account.storage.state.state.code;
 }
 
-// Build a multisig-dapp-compatible order cell carrying a sudo.upgrade message
-// with the locally compiled UpdatePool's after_upgrade as the afterUpgrade ref.
-async function buildLocalOrder(queryId: bigint, poolAddr: Address): Promise<Cell> {
-  const after = await compileAfterUpgrade();
-  const body = Pool.upgradeMessage(null, null, after);
-  // Internal message: dest=pool, value=0.5 TON, body in ref.
-  const internalMsg = beginCell()
-    .storeUint(0b01_1000, 6) // 0 (int_msg_info$0) + ihr_disabled(1) + bounce(1) + bounced(0) + src=none(00)
-    .storeAddress(poolAddr)
-    .storeCoins(toNano('0.5'))
-    .storeUint(0, 1 + 4 + 4 + 64 + 32) // currencies + ihr_fee + fwd_fee + created_lt + created_at
-    .storeBit(false) // no init
-    .storeBit(true)  // body in ref
-    .storeRef(body)
-    .endCell();
-  return beginCell()
-    .storeUint(queryId, 64)
-    .storeUint(3, 8) // sendMode
-    .storeRef(internalMsg)
-    .endCell();
-}
