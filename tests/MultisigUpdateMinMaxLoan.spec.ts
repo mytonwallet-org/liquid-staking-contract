@@ -1,10 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { Blockchain, SandboxContract, createShardAccount } from '@ton-community/sandbox';
-import { Address, Cell, Dictionary, DictionaryValue, beginCell, loadMessageRelaxed, toNano } from 'ton-core';
-import { compile } from '@ton-community/blueprint';
+import { Address, Cell, Dictionary, DictionaryValue, beginCell, toNano } from 'ton-core';
 import '@ton-community/test-utils';
 import { Pool } from '../wrappers/Pool';
+import { compileAfterUpgrade, parseOrder, verifyOrder } from '../wrappers/UpdatePool';
 import { Op } from '../PoolConstants';
 
 // Load .env if present (project does not use dotenv).
@@ -61,23 +61,14 @@ describeOrSkip('Multisig v1 upgrade flow (uses production state via toncenter)',
   }, 60_000);
 
   it('order.boc carries the expected after_upgrade(7777) call', async () => {
-    const order = readOrder();
-    expect(order.messages).toHaveLength(1);
-
-    const msg = order.messages[0];
-    expect(msg.destination.equals(Address.parse(POOL_ADDRESS))).toBe(true);
-    expect(msg.value).toEqual(toNano('0.5'));
-
-    const body = msg.body.beginParse();
-    expect(body.loadUint(32)).toEqual(Op.sudo.upgrade);
-    body.loadUintBig(64); // query_id
-    expect(body.loadBit()).toBe(false); // no data
-    expect(body.loadBit()).toBe(false); // no code
-    expect(body.loadBit()).toBe(true);  // has afterUpgrade
-
-    const afterUpgrade = body.loadRef();
-    const expectedAfter = await buildExpectedAfterUpgrade();
-    expect(afterUpgrade.hash().toString('hex')).toEqual(expectedAfter.hash().toString('hex'));
+    const afterUpgrade = await compileAfterUpgrade();
+    const expectedBody = Pool.upgradeMessage(null, null, afterUpgrade);
+    const order = parseOrder(fs.readFileSync(ORDER_BOC_PATH));
+    verifyOrder(order, {
+      pool: Address.parse(POOL_ADDRESS),
+      value: toNano('0.5'),
+      bodyHashHex: expectedBody.hash().toString('hex'),
+    });
   });
 
   it('Signing the order through multisig updates min/max loan on the pool', async () => {
@@ -97,24 +88,29 @@ describeOrSkip('Multisig v1 upgrade flow (uses production state via toncenter)',
       pendingQueries: Dictionary.empty(Dictionary.Keys.Uint(64), Dictionary.Values.Cell()),
     });
 
-    const balance = await getContractBalance(bc, multisigAddress);
+    // Top up multisig so it can forward 0.5 TON to the pool — production
+    // balance is ~0.445 TON, which the sendMode=3 (IGNORE_ERRORS) action would
+    // silently skip on insufficient funds.
     const code = await getContractCode(bc, multisigAddress);
     await bc.setShardAccount(multisigAddress, createShardAccount({
-      address: multisigAddress, balance, code, data: newData,
+      address: multisigAddress, balance: toNano('5'), code, data: newData,
     }));
 
     // queryId top 32 bits encode the expire timestamp; align bc.now so the
     // multisig accepts the query as live (throw_if 33 guards expiration).
-    const order = readOrder();
-    const expireUnix = Number(order.queryId >> 32n);
-    bc.now = Math.min(bc.now ?? expireUnix - 60, expireUnix - 60);
+    // Build the order locally against the currently compiled UpdatePool — the
+    // on-disk order.boc is signed against a specific UpdatePool build and
+    // drifts as soon as we rebuild the contract.
+    const queryId = BigInt(Math.floor(Date.now() / 1000) + 86400) << 32n;
+    const expireUnix = Number(queryId >> 32n);
+    bc.now = expireUnix - 3600;
+    const orderCell = await buildLocalOrder(queryId, Address.parse(POOL_ADDRESS));
 
     // Build the externally signed payload exactly like multisig-dapp does:
     //   inner  = [8: owner_id=0] [1: 0 = no extra sigs dict] [32: wallet_id] [order...]
     //   signed = [512: signature] [inner...]
     // Signature is a 64-byte zero buffer — ignoreChksig=true makes the
     // contract accept it.
-    const orderCell = Cell.fromBoc(fs.readFileSync(ORDER_BOC_PATH))[0];
     const inner = beginCell()
       .storeUint(0, 8)
       .storeBit(false)
@@ -145,6 +141,10 @@ describeOrSkip('Multisig v1 upgrade flow (uses production state via toncenter)',
     expect(dataAfter.maxLoan).not.toEqual(dataBefore.maxLoan);
     expect(dataAfter.minLoan).toEqual(toNano('300000'));
     expect(dataAfter.maxLoan).toEqual(toNano('3000000'));
+
+    // Everything else must remain untouched — the forward-parse rewrite is
+    // supposed to swap only the two loan_params coins.
+    expectSameExcept(dataBefore, dataAfter, ['minLoan', 'maxLoan']);
   });
 });
 
@@ -172,8 +172,32 @@ function packMultisigData(opts: {
     .endCell();
 }
 
-async function getContractBalance(bc: Blockchain, addr: Address): Promise<bigint> {
-  return (await bc.getContract(addr)).balance;
+// Deep equality for getFullData() snapshots, excluding the specified top-level
+// keys. Cells use hash-based equality; Addresses use .equals; bigints use
+// strict ===; nested objects/arrays recurse.
+function expectSameExcept<T extends Record<string, any>>(a: T, b: T, ignored: (keyof T)[]) {
+  const ignore = new Set(ignored);
+  for (const k of Object.keys(a) as (keyof T)[]) {
+    if (ignore.has(k)) continue;
+    expect({ key: k, value: serializeForCompare((b as any)[k]) }).toEqual({
+      key: k,
+      value: serializeForCompare((a as any)[k]),
+    });
+  }
+}
+
+function serializeForCompare(v: any): any {
+  if (v === null || v === undefined) return v;
+  if (typeof v === 'bigint') return v.toString() + 'n';
+  if (v instanceof Cell) return 'Cell:' + v.hash().toString('hex');
+  if (v instanceof Address) return 'Addr:' + v.toRawString();
+  if (Array.isArray(v)) return v.map(serializeForCompare);
+  if (typeof v === 'object') {
+    const out: any = {};
+    for (const k of Object.keys(v)) out[k] = serializeForCompare(v[k]);
+    return out;
+  }
+  return v;
 }
 
 // ───── helpers ─────────────────────────────────────────────────────────────
@@ -221,38 +245,24 @@ async function getContractCode(bc: Blockchain, addr: Address): Promise<Cell> {
   return smc.account.account.storage.state.state.code;
 }
 
-type ParsedOrder = {
-  queryId: bigint;
-  messages: { sendMode: number; destination: Address; value: bigint; body: Cell }[];
-};
-
-function readOrder(): ParsedOrder {
-  const root = Cell.fromBoc(fs.readFileSync(ORDER_BOC_PATH))[0];
-  const s = root.beginParse();
-  const queryId = s.loadUintBig(64);
-  const messages: ParsedOrder['messages'] = [];
-  while (s.remainingRefs > 0) {
-    const sendMode = s.loadUint(8);
-    const msg = loadMessageRelaxed(s.loadRef().beginParse());
-    if (msg.info.type !== 'internal') throw new Error(`Non-internal msg in order: ${msg.info.type}`);
-    messages.push({
-      sendMode,
-      destination: msg.info.dest,
-      value: msg.info.value.coins,
-      body: msg.body,
-    });
-  }
-  return { queryId, messages };
-}
-
-async function buildExpectedAfterUpgrade(): Promise<Cell> {
-  const code = await compile('UpdatePool');
-  const seg: DictionaryValue<Cell> = {
-    parse: (src) => beginCell().storeSlice(src).endCell(),
-    serialize: (src, b) => { b.storeSlice(src.asSlice()); },
-  };
-  const methods = Dictionary.loadDirect(Dictionary.Keys.Uint(19), seg, code.refs[0]);
-  const after = methods.get(7777);
-  if (!after) throw new Error('after_upgrade(7777) not found in UpdatePool');
-  return after;
+// Build a multisig-dapp-compatible order cell carrying a sudo.upgrade message
+// with the locally compiled UpdatePool's after_upgrade as the afterUpgrade ref.
+async function buildLocalOrder(queryId: bigint, poolAddr: Address): Promise<Cell> {
+  const after = await compileAfterUpgrade();
+  const body = Pool.upgradeMessage(null, null, after);
+  // Internal message: dest=pool, value=0.5 TON, body in ref.
+  const internalMsg = beginCell()
+    .storeUint(0b01_1000, 6) // 0 (int_msg_info$0) + ihr_disabled(1) + bounce(1) + bounced(0) + src=none(00)
+    .storeAddress(poolAddr)
+    .storeCoins(toNano('0.5'))
+    .storeUint(0, 1 + 4 + 4 + 64 + 32) // currencies + ihr_fee + fwd_fee + created_lt + created_at
+    .storeBit(false) // no init
+    .storeBit(true)  // body in ref
+    .storeRef(body)
+    .endCell();
+  return beginCell()
+    .storeUint(queryId, 64)
+    .storeUint(3, 8) // sendMode
+    .storeRef(internalMsg)
+    .endCell();
 }
