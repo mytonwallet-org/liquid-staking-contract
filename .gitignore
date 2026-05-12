@@ -3,3 +3,6 @@ temp
 build
 yarn.lock
 vim.session
+.idea
+.vscode
+.env
