@@ -116,6 +116,7 @@ async function simulate(orderPath: string) {
     .endCell();
 
   const dataBefore = await pool.getFullData();
+  const balanceBefore = (await bc.getContract(poolAddress)).balance;
   const res = await bc.sendMessage({
     info: { type: 'external-in', src: undefined, dest: multisigAddress, importFee: 0n },
     body: signedBody,
@@ -138,10 +139,27 @@ async function simulate(orderPath: string) {
     throw new Error(`Pool received op=${inOp}, expected sudo.upgrade=${Op.sudo.upgrade}`);
   }
 
+  // The pool must not emit any outgoing messages while processing the upgrade.
+  const poolOutMsgs = res.transactions
+    .filter((t) => t.inMessage?.info.dest?.toString() === poolAddress.toString())
+    .flatMap((t) => t.outMessages.values());
+  if (poolOutMsgs.length > 0) {
+    const dests = poolOutMsgs.map((m) => m.info.dest?.toString() ?? '?').join(', ');
+    throw new Error(`Pool emitted ${poolOutMsgs.length} outgoing message(s): ${dests}`);
+  }
+
+  // The upgrade must not drain the pool: its balance must not decrease.
+  const balanceAfter = (await bc.getContract(poolAddress)).balance;
+  if (balanceAfter < balanceBefore) {
+    throw new Error(`Pool balance decreased: ${fromNano(balanceBefore)} → ${fromNano(balanceAfter)} TON`);
+  }
+
   const dataAfter = await pool.getFullData();
 
   console.log('  Pool min loan:        ', `${fromNano(dataBefore.minLoan)} → ${fromNano(dataAfter.minLoan)} TON`);
   console.log('  Pool max loan:        ', `${fromNano(dataBefore.maxLoan)} → ${fromNano(dataAfter.maxLoan)} TON`);
+  console.log('  Pool balance (TON):   ', `${fromNano(balanceBefore)} → ${fromNano(balanceAfter)} (no decrease)`);
+  console.log('  Outgoing from pool:    none');
 
   const expectedMin = toNano('300000');
   const expectedMax = toNano('3000000');
