@@ -116,6 +116,7 @@ async function simulate(orderPath: string) {
     .endCell();
 
   const dataBefore = await pool.getFullData();
+  const dataCellBefore = await getContractData(bc, poolAddress);
   const balanceBefore = (await bc.getContract(poolAddress)).balance;
   const res = await bc.sendMessage({
     info: { type: 'external-in', src: undefined, dest: multisigAddress, importFee: 0n },
@@ -172,7 +173,49 @@ async function simulate(orderPath: string) {
 
   assertSameExcept(dataBefore, dataAfter, ['minLoan', 'maxLoan']);
   console.log('  Other fields:         unchanged');
+
+  // Rebuild the data cell with only the two loan_params replaced; a hash match proves nothing else changed.
+  const dataCellAfter = await getContractData(bc, poolAddress);
+  const expectedCell = rebuildPoolDataWithLoans(dataCellBefore, expectedMin, expectedMax);
+  const expectedHash = expectedCell.hash().toString('hex');
+  const actualHash = dataCellAfter.hash().toString('hex');
+  if (expectedHash !== actualHash) {
+    throw new Error(`Data cell hash mismatch:\n  expected: ${expectedHash}\n  actual:   ${actualHash}`);
+  }
+  console.log('  Data cell hash:        matches expected (only min/max loan replaced)');
   console.log('  Emulation:            OK');
+}
+
+// Parse the pre-upgrade data cell exactly as after_upgrade does and re-serialize with only min/max loan replaced.
+function rebuildPoolDataWithLoans(before: Cell, newMin: bigint, newMax: bigint): Cell {
+  const ds = before.beginParse();
+  const state = ds.loadUint(8);
+  const halted = ds.loadBoolean();
+  const totalBalance = ds.loadCoins();
+  const mintersRef = ds.loadRef();
+  const interestRate = ds.loadUint(24);    // load_share
+  const optimisticDw = ds.loadBoolean();
+  const depositsOpen = ds.loadBoolean();
+  const validatorSetHash = ds.loadUintBig(256);
+  const roundDataRef = ds.loadRef();
+  ds.loadCoins();                          // skip old min_loan
+  ds.loadCoins();                          // skip old max_loan
+  // `ds` now holds the untouched tail (governance_fee, roles, codes).
+
+  return beginCell()
+    .storeUint(state, 8)
+    .storeBit(halted)
+    .storeCoins(totalBalance)
+    .storeRef(mintersRef)
+    .storeUint(interestRate, 24)
+    .storeBit(optimisticDw)
+    .storeBit(depositsOpen)
+    .storeUint(validatorSetHash, 256)
+    .storeRef(roundDataRef)
+    .storeCoins(newMin)
+    .storeCoins(newMax)
+    .storeSlice(ds)
+    .endCell();
 }
 
 // ───── helpers ─────────────────────────────────────────────────────────────
