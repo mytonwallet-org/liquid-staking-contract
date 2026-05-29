@@ -117,6 +117,7 @@ async function simulate(orderPath: string) {
 
   const dataBefore = await pool.getFullData();
   const dataCellBefore = await getContractData(bc, poolAddress);
+  const codeBefore = await getContractCode(bc, poolAddress);
   const balanceBefore = (await bc.getContract(poolAddress)).balance;
   const res = await bc.sendMessage({
     info: { type: 'external-in', src: undefined, dest: multisigAddress, importFee: 0n },
@@ -183,6 +184,13 @@ async function simulate(orderPath: string) {
     throw new Error(`Data cell hash mismatch:\n  expected: ${expectedHash}\n  actual:   ${actualHash}`);
   }
   console.log('  Data cell hash:        matches expected (only min/max loan replaced)');
+
+  // The contract code must stay untouched: this upgrade only runs after_upgrade.
+  const codeAfter = await getContractCode(bc, poolAddress);
+  if (!codeBefore.hash().equals(codeAfter.hash())) {
+    throw new Error(`Code hash changed:\n  before: ${codeBefore.hash().toString('hex')}\n  after:  ${codeAfter.hash().toString('hex')}`);
+  }
+  console.log('  Code hash:             unchanged');
   console.log('  Emulation:            OK');
 }
 
