@@ -22,7 +22,20 @@ const POOL_ADDRESS = 'EQD2_4d91M4TVbEBVyBF8J1UwpMJc361LKVCz6bBlffMW05o';
 const ORDER_BOC_PATH = path.resolve(process.env.ORDER_BOC ?? 'order.boc');
 const TON_API_KEY = process.env.TON_API_KEY;
 
-describe('Multisig v1 upgrade flow (uses production state via toncenter)', () => {
+// This suite needs the signed order.boc and a toncenter API key; on a fresh
+// clone neither exists yet, so skip (loudly) instead of failing — a red run
+// here would be noise, not signal. The pre-sign gate is the blueprint script,
+// which DOES hard-fail on missing prerequisites.
+const missing = [
+  ...(fs.existsSync(ORDER_BOC_PATH) ? [] : [`order.boc (looked at ${ORDER_BOC_PATH})`]),
+  ...(TON_API_KEY ? [] : ['TON_API_KEY env var']),
+];
+if (missing.length > 0) {
+  console.warn(`SKIPPING MultisigUpdateMinMaxLoan suite — missing: ${missing.join(', ')}`);
+}
+const describeIfReady = missing.length > 0 ? describe.skip : describe;
+
+describeIfReady('Multisig v1 upgrade flow (uses production state via toncenter)', () => {
   let bc: Blockchain;
   let pool: SandboxContract<Pool>;
   let multisigAddress: Address;
@@ -66,6 +79,7 @@ describe('Multisig v1 upgrade flow (uses production state via toncenter)', () =>
       pool: Address.parse(POOL_ADDRESS),
       value: toNano('0.5'),
       bodyHashHex: expectedBody.hash().toString('hex'),
+      sendMode: 3, // multisig-dapp builds order messages with mode 3
     });
   });
 
