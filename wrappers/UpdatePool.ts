@@ -56,7 +56,7 @@ export function parseOrder(boc: Buffer): ParsedOrder {
   return { queryId, messages };
 }
 
-export type OrderExpectations = { pool: Address; value: bigint; bodyHashHex: string };
+export type OrderExpectations = { pool: Address; value: bigint; bodyHashHex: string; sendMode: number };
 
 export function verifyOrder(order: ParsedOrder, expected: OrderExpectations): void {
   if (order.messages.length !== 1) {
@@ -66,6 +66,9 @@ export function verifyOrder(order: ParsedOrder, expected: OrderExpectations): vo
   const msg = order.messages[0];
   const errors: string[] = [];
 
+  if (msg.sendMode !== expected.sendMode) {
+    errors.push(`send_mode mismatch: expected ${expected.sendMode}, got ${msg.sendMode}`);
+  }
   if (!msg.destination.equals(expected.pool)) {
     errors.push(`destination mismatch: expected ${expected.pool.toString()}, got ${msg.destination.toString()}`);
   }

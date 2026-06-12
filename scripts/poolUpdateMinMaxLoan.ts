@@ -8,7 +8,15 @@ import { AFTER_UPGRADE_METHOD_ID, compileAfterUpgrade, parseOrder, verifyOrder }
 import { Op } from '../PoolConstants';
 
 const POOL = 'EQD2_4d91M4TVbEBVyBF8J1UwpMJc361LKVCz6bBlffMW05o';
+// The pool's sudoer; the order must be executed by this exact multisig.
+const EXPECTED_MULTISIG = 'EQDbsFaxyZERqMVfeS4BI1ElUynogUXM62-AquTbh71CMP2C';
 const EXPECTED_VALUE = toNano('0.5');
+// multisig-dapp builds order messages with mode 3 (pay fees separately + ignore errors).
+const EXPECTED_SEND_MODE = 3;
+const CURRENT_MIN_LOAN = toNano('10000');
+const CURRENT_MAX_LOAN = toNano('1000000');
+const NEW_MIN_LOAN = toNano('300000');
+const NEW_MAX_LOAN = toNano('3000000');
 const ORDER_BOC_DEFAULT = 'order.boc';
 
 export async function run(_provider: NetworkProvider) {
@@ -33,7 +41,7 @@ export async function run(_provider: NetworkProvider) {
 
   console.log(`\nFound order file: ${orderPath}`);
   const order = parseOrder(fs.readFileSync(orderPath));
-  verifyOrder(order, { pool: Address.parse(POOL), value: EXPECTED_VALUE, bodyHashHex });
+  verifyOrder(order, { pool: Address.parse(POOL), value: EXPECTED_VALUE, bodyHashHex, sendMode: EXPECTED_SEND_MODE });
 
   const msg = order.messages[0];
   const expireUnix = Number(order.queryId >> 32n);
@@ -55,8 +63,9 @@ export async function run(_provider: NetworkProvider) {
 async function simulate(orderPath: string) {
   const apiKey = process.env.TON_API_KEY;
   if (!apiKey) {
-    console.log('\nNo TON_API_KEY in env — skipping emulation. Set TON_API_KEY to enable.');
-    return;
+    // An order.boc is present, so this run is the pre-sign check — refusing to
+    // pass silently without the emulation would defeat its purpose.
+    throw new Error('order.boc is present but TON_API_KEY is not set — emulation against production state is mandatory before signing. Set TON_API_KEY and rerun.');
   }
 
   console.log('\n---\nEmulation against production state:');
@@ -70,6 +79,9 @@ async function simulate(orderPath: string) {
 
   const fullData = await pool.getFullData();
   const multisigAddress = fullData.sudoer;
+  if (!multisigAddress.equals(Address.parse(EXPECTED_MULTISIG))) {
+    throw new Error(`Pool sudoer is ${multisigAddress.toString()}, expected multisig ${EXPECTED_MULTISIG} — sudoer changed since this script was written, do NOT sign.`);
+  }
   await fetchAccount(bc, multisigAddress, apiKey);
   const multisigData = await getContractData(bc, multisigAddress);
   const multisigCode = await getContractCode(bc, multisigAddress);
@@ -116,6 +128,12 @@ async function simulate(orderPath: string) {
     .endCell();
 
   const dataBefore = await pool.getFullData();
+  // The live values must be the ones this upgrade was written against; anything
+  // else means the pool changed under us and the diff must be re-reviewed.
+  if (dataBefore.minLoan !== CURRENT_MIN_LOAN || dataBefore.maxLoan !== CURRENT_MAX_LOAN) {
+    throw new Error(`Pre-upgrade loan params are ${fromNano(dataBefore.minLoan)}/${fromNano(dataBefore.maxLoan)} TON, `
+      + `expected ${fromNano(CURRENT_MIN_LOAN)}/${fromNano(CURRENT_MAX_LOAN)} TON — pool state changed, do NOT sign.`);
+  }
   const dataCellBefore = await getContractData(bc, poolAddress);
   const codeBefore = await getContractCode(bc, poolAddress);
   const balanceBefore = (await bc.getContract(poolAddress)).balance;
@@ -163,13 +181,11 @@ async function simulate(orderPath: string) {
   console.log('  Pool balance (TON):   ', `${fromNano(balanceBefore)} → ${fromNano(balanceAfter)} (no decrease)`);
   console.log('  Outgoing from pool:    none');
 
-  const expectedMin = toNano('300000');
-  const expectedMax = toNano('3000000');
-  if (dataAfter.minLoan !== expectedMin) {
-    throw new Error(`minLoan = ${fromNano(dataAfter.minLoan)} TON, expected ${fromNano(expectedMin)} TON`);
+  if (dataAfter.minLoan !== NEW_MIN_LOAN) {
+    throw new Error(`minLoan = ${fromNano(dataAfter.minLoan)} TON, expected ${fromNano(NEW_MIN_LOAN)} TON`);
   }
-  if (dataAfter.maxLoan !== expectedMax) {
-    throw new Error(`maxLoan = ${fromNano(dataAfter.maxLoan)} TON, expected ${fromNano(expectedMax)} TON`);
+  if (dataAfter.maxLoan !== NEW_MAX_LOAN) {
+    throw new Error(`maxLoan = ${fromNano(dataAfter.maxLoan)} TON, expected ${fromNano(NEW_MAX_LOAN)} TON`);
   }
 
   assertSameExcept(dataBefore, dataAfter, ['minLoan', 'maxLoan']);
@@ -177,7 +193,7 @@ async function simulate(orderPath: string) {
 
   // Rebuild the data cell with only the two loan_params replaced; a hash match proves nothing else changed.
   const dataCellAfter = await getContractData(bc, poolAddress);
-  const expectedCell = rebuildPoolDataWithLoans(dataCellBefore, expectedMin, expectedMax);
+  const expectedCell = rebuildPoolDataWithLoans(dataCellBefore, NEW_MIN_LOAN, NEW_MAX_LOAN);
   const expectedHash = expectedCell.hash().toString('hex');
   const actualHash = dataCellAfter.hash().toString('hex');
   if (expectedHash !== actualHash) {
